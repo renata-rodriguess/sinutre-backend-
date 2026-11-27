@@ -7,6 +7,7 @@ export const apiRateLimit = rateLimit({
   limit: 100,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
+  skip: (req) => req.path === '/auth/github',
   message: {
     error: 'Muitas requisições. Tente novamente em alguns minutos.',
   },
@@ -14,7 +15,7 @@ export const apiRateLimit = rateLimit({
 
 export const authRateLimit = rateLimit({
   windowMs: isDevelopment ? 60 * 1000 : 15 * 60 * 1000,
-  limit: isDevelopment ? 100 : 10,
+  limit: isDevelopment ? 100 : 100,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   message: {
