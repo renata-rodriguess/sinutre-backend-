@@ -50,16 +50,15 @@ export class WorkoutController {
       });
 
       if (existingWorkout) {
-
         await prisma.workout.delete({
           where: { id: existingWorkout.id },
         });
         return res.json({ completed: false });
       } else {
-
         await prisma.workout.create({
           data: {
             userId: Number(userId),
+            title: 'Treino do dia',
             completed: true,
           },
         });
