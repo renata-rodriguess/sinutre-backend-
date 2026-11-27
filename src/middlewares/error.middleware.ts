@@ -21,6 +21,8 @@ export function errorHandler(
   res: Response,
   _next: NextFunction,
 ) {
+  console.error('ERRO INTERNO SI NUTRE:', err);
+
   if (res.headersSent) {
     return;
   }

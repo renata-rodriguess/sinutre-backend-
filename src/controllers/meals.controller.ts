@@ -79,63 +79,69 @@ export async function createMeal(req: Request, res: Response) {
     });
   }
 
-  const meal = await prisma.$transaction(async (tx) => {
-    const mealFoodData = [];
+  const meal = await prisma.$transaction(
+    async (tx) => {
+      const mealFoodData = [];
 
-    for (const item of items) {
-      const foodName = item.name || 'Alimento';
-      const grams = Number(item.grams);
-      
-      const calories = Number(item.calories) || (grams * 1.5);
-      const carbs = Number(item.carbs) || (grams * 0.2);
-      const protein = Number(item.proteins) || (grams * 0.1);
-      const fat = Number(item.fats) || (grams * 0.05);
+      for (const item of items) {
+        const foodName = item.name || 'Alimento';
+        const grams = Number(item.grams);
 
-      let foodRecord = await tx.food.findFirst({
-        where: { name: foodName, userId },
-      });
+        const calories = Number(item.calories) || grams * 1.5;
+        const carbs = Number(item.carbs) || grams * 0.2;
+        const protein = Number(item.proteins) || grams * 0.1;
+        const fat = Number(item.fats) || grams * 0.05;
 
-      if (!foodRecord) {
-        foodRecord = await tx.food.create({
-          data: {
-            name: foodName,
-            userId,
-            caloriesPer100g: (calories / grams) * 100,
-            carbsPer100g: (carbs / grams) * 100,
-            proteinPer100g: (protein / grams) * 100,
-            fatPer100g: (fat / grams) * 100,
-          },
+        let foodRecord = await tx.food.findFirst({
+          where: { name: foodName, userId },
+        });
+
+        if (!foodRecord) {
+          foodRecord = await tx.food.create({
+            data: {
+              name: foodName,
+              userId,
+              caloriesPer100g: (calories / grams) * 100,
+              carbsPer100g: (carbs / grams) * 100,
+              proteinPer100g: (protein / grams) * 100,
+              fatPer100g: (fat / grams) * 100,
+            },
+          });
+        }
+
+        mealFoodData.push({
+          foodId: foodRecord.id,
+          foodG: grams,
+          calories,
+          carbs,
+          protein,
+          fat,
         });
       }
 
-      mealFoodData.push({
-        foodId: foodRecord.id,
-        foodG: grams,
-        calories,
-        carbs,
-        protein,
-        fat,
+      const newMeal = await tx.meal.create({
+        data: {
+          type,
+          eatTime: mealDate,
+          description: description.trim(),
+          userId,
+        },
       });
-    }
 
-    const newMeal = await tx.meal.create({
-      data: {
-        type,
-        eatTime: mealDate,
-        description: description.trim(),
-        userId,
-      },
-    });
+      await tx.mealFood.createMany({
+        data: mealFoodData.map((mfd) => ({
+          mealId: newMeal.id,
+          ...mfd,
+        })),
+      });
 
-    await tx.mealFood.createMany({
-      data: mealFoodData.map((mfd) => ({
-        mealId: newMeal.id,
-        ...mfd,
-      })),
-    });
-
-    return newMeal;
-  });
+      return newMeal;
+    },
+    {
+      maxWait: 10000,
+      timeout: 20000,
+    },
+  );
 
   return res.status(201).json(meal);
 }

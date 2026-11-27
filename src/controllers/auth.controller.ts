@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
+import https from 'node:https';
 import { prisma } from '../prisma';
 import { env } from '../config/env';
 
@@ -14,6 +15,67 @@ const stateCookieOptions = {
   sameSite: 'lax' as const,
   path: '/auth/github',
 };
+
+function githubRequest(
+  url: string,
+  method: 'GET' | 'POST',
+  headers: Record<string, string>,
+  body?: string,
+): Promise<{ statusCode: number; data: unknown }> {
+  return new Promise((resolve, reject) => {
+    const requestHeaders = { ...headers };
+
+    if (body) {
+      requestHeaders['Content-Length'] = String(
+        Buffer.byteLength(body),
+      );
+    }
+
+    const request = https.request(
+      new URL(url),
+      {
+        method,
+        headers: requestHeaders,
+      },
+      (response) => {
+        const chunks: Buffer[] = [];
+
+        response.on('data', (chunk: Buffer) => {
+          chunks.push(chunk);
+        });
+
+        response.on('end', () => {
+          const responseBody = Buffer.concat(chunks).toString('utf8');
+
+          try {
+            resolve({
+              statusCode: response.statusCode ?? 0,
+              data: JSON.parse(responseBody),
+            });
+          } catch {
+            reject(new Error('Resposta inválida recebida do GitHub.'));
+          }
+        });
+
+        response.on('error', reject);
+      },
+    );
+
+    request.setTimeout(45000, () => {
+      request.destroy(
+        new Error(`Tempo limite de conexão com ${new URL(url).hostname}.`),
+      );
+    });
+
+    request.on('error', reject);
+
+    if (body) {
+      request.write(body);
+    }
+
+    request.end();
+  });
+}
 
 export async function redirectToGithub(_req: Request, res: Response) {
   const state = randomBytes(32).toString('hex');
@@ -52,46 +114,56 @@ export async function githubCallback(req: Request, res: Response) {
     });
   }
 
-  const tokenResponse = await fetch(GITHUB_TOKEN_URL, {
-    method: 'POST',
-    headers: {
+  const tokenResponse = await githubRequest(
+    GITHUB_TOKEN_URL,
+    'POST',
+    {
       Accept: 'application/json',
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
+    JSON.stringify({
       client_id: env.github.clientId,
       client_secret: env.github.clientSecret,
       code,
       redirect_uri: env.github.callbackUrl,
     }),
-  });
+  );
 
-  const tokenData = (await tokenResponse.json()) as {
+  const tokenData = tokenResponse.data as {
     access_token?: string;
     error?: string;
   };
 
-  if (!tokenData.access_token) {
+  if (
+    tokenResponse.statusCode < 200 ||
+    tokenResponse.statusCode >= 300 ||
+    !tokenData.access_token
+  ) {
     return res.status(401).json({
       error: 'Falha ao obter access_token do GitHub.',
     });
   }
 
-  const userResponse = await fetch(GITHUB_USER_URL, {
-    headers: {
+  const userResponse = await githubRequest(
+    GITHUB_USER_URL,
+    'GET',
+    {
       Authorization: `Bearer ${tokenData.access_token}`,
       Accept: 'application/vnd.github+json',
       'User-Agent': 'sinutre-back',
     },
-  });
+  );
 
-  if (!userResponse.ok) {
+  if (
+    userResponse.statusCode < 200 ||
+    userResponse.statusCode >= 300
+  ) {
     return res.status(401).json({
       error: 'Não foi possível obter os dados da conta GitHub.',
     });
   }
 
-  const githubUser = (await userResponse.json()) as {
+  const githubUser = userResponse.data as {
     id: number;
     login: string;
     name: string | null;
