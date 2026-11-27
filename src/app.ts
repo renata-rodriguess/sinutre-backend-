@@ -18,6 +18,8 @@ import { apiRateLimit, authRateLimit } from './middlewares/rateLimit.middleware'
 
 export const app = express();
 
+app.set('trust proxy', 1);
+
 app.use(helmet({
   contentSecurityPolicy: false,
 }));
