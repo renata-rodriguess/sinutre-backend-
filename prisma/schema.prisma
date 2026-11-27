@@ -107,6 +107,7 @@ model Workout {
   id          Int      @id @default(autoincrement())
   title       String
   description String?
+  completed   Boolean  @default(false)
   createdAt   DateTime @default(now()) @map("created_at")
   userId      Int      @map("user_id")
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
