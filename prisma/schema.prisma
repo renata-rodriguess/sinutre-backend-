@@ -21,6 +21,7 @@ model User {
   meals        Meal[]
   waterIntakes WaterIntake[]
   weightLogs   WeightLog[]
+  workouts     Workout[]
 
   @@map("users")
 }
@@ -100,4 +101,15 @@ model WaterIntake {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("water_intakes")
+}
+
+model Workout {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  userId      Int      @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("workouts")
 }
